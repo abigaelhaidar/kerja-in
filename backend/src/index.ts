@@ -46,6 +46,14 @@ function generateCustomId(prefix: string, length: number, lastId: string) {
   return `${prefix}${number.toString().padStart(length, '0')}`;
 }
 
+async function isUserRegistered(telegram_id: number) {
+  const { data: users } = await supabase
+    .from('users')
+    .select('id')
+    .eq('telegram_id', telegram_id);
+  return users && users.length > 0;
+}
+
 // Sample route
 app.get('/', (req, res) => {
   res.send('Hello, World!');
@@ -76,8 +84,13 @@ bot.onText(/^\/register/, async (msg) => {
 // task
 bot.onText(/^\/task/, async (msg) => {
   const telegram_id = msg.chat.id;
-  const today = dayjs().format('YYYY-MM-DD');
+  
+  const isRegistered = await isUserRegistered(telegram_id);
+  if (!isRegistered) {
+    return bot.sendMessage(telegram_id, 'Anda belum terdaftar. Silakan daftar dengan perintah /register');
+  }
 
+  const today = dayjs().format('YYYY-MM-DD');
   const { data: tasks } = await supabase
     .from('tasks')
     .select('*')
@@ -115,6 +128,11 @@ bot.on('message', async (msg: any) => {
   const taskId = match?.[1];
 
   if (!taskId) return; // Bukan command /report
+
+  const isRegistered = await isUserRegistered(telegram_id);
+  if (!isRegistered) {
+    return bot.sendMessage(telegram_id, 'Anda belum terdaftar. Gunakan /register untuk mendaftar.');
+  }
 
   // Pastikan ada foto
   if (!msg.photo || msg.photo.length === 0) {

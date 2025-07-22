@@ -4,9 +4,18 @@ import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
 import { createClient } from '@supabase/supabase-js';
 import dayjs from 'dayjs';
+import { v2 as cloudinary } from 'cloudinary';
+import axios from 'axios';
 
 // Initialize dotenv
 dotenv.config();
+
+// cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
+  api_key: process.env.CLOUDINARY_API_KEY!,
+  api_secret: process.env.CLOUDINARY_API_SECRET!,
+});
 
 // connectDB(); step 13
 const app = express();
@@ -17,6 +26,8 @@ const supabase = createClient(process.env.SUPABASE_URL as string, process.env.SU
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+const userReportState: Record<number, string> = {}; // telegram_id -> taskId
 
 // Command list
 const commandList = `
@@ -94,12 +105,54 @@ bot.onText(/^\/task/, async (msg) => {
 });
 
 // /report [taskId]
-bot.onText(/^\/report\s+(\w+)/, async (msg, match) => {
+bot.on('message', async (msg: any) => {
   const telegram_id = msg.chat.id;
-  const taskId = match?.[1];
+  const text = msg.caption || msg.text;
   const today = dayjs().format('YYYY-MM-DD');
 
-  // Cek apakah TaskId valid dan sesuai dengan hari ini
+  // Deteksi command /report [taskId] dari caption atau text
+  const match = text?.match(/^\/report\s+(\w+)/);
+  const taskId = match?.[1];
+
+  if (!taskId) return; // Bukan command /report
+
+  // Pastikan ada foto
+  if (!msg.photo || msg.photo.length === 0) {
+    return bot.sendMessage(telegram_id, 'Mohon kirim laporan dengan foto tugas.');
+  }
+
+  // Ambil file_id dengan resolusi tertinggi
+  const fileId = msg.photo[msg.photo.length - 1].file_id;
+  const fileInfo = await bot.getFile(fileId);
+  const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${fileInfo.file_path}`;
+
+  // Upload ke Cloudinary
+  let photo_url = '';
+  try {
+    const response = await axios({
+      method: 'GET',
+      url: fileUrl,
+      responseType: 'stream',
+    });
+
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'job-management' },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      response.data.pipe(stream);
+    });
+
+    photo_url = (uploadResult as any).secure_url;
+  } catch (err) {
+    console.error('Upload error:', err);
+    return bot.sendMessage(telegram_id, 'Gagal mengunggah foto.');
+  }
+
+  // Validasi task hari ini
   const { data: tasks } = await supabase
     .from('tasks')
     .select('*')
@@ -107,10 +160,10 @@ bot.onText(/^\/report\s+(\w+)/, async (msg, match) => {
     .eq('id', taskId);
 
   if (!tasks || tasks.length === 0) {
-    return bot.sendMessage(telegram_id, 'Tidak ada pekerjaan dengan kode tersebut.');
+    return bot.sendMessage(telegram_id, 'Tidak ada pekerjaan dengan kode tersebut hari ini.');
   }
 
-  // Ambil ID terakhir dari laporan untuk generate SUB ID
+  // Generate SUB ID
   const { data: existingReports } = await supabase
     .from('task_reports')
     .select('id')
@@ -119,21 +172,26 @@ bot.onText(/^\/report\s+(\w+)/, async (msg, match) => {
   const lastReportId = existingReports?.length ? existingReports[existingReports.length - 1].id : null;
   const newReportId = generateCustomId('SUB', 3, lastReportId);
 
-  // Insert laporan tanpa kolom deskripsi
+  // Simpan ke Supabase
   const { error } = await supabase.from('task_reports').insert([
     {
       id: newReportId,
       task_id: taskId,
       submitted_by: telegram_id,
+      photo_url,
       status: 'pending',
       submitted_at: new Date().toISOString(),
       reviewed_by: "supervisor",
-      notified: false
+      notified: false,
     },
   ]);
 
-  if (error) return bot.sendMessage(telegram_id, 'Gagal mengirim laporan. Coba lagi nanti.');
-  bot.sendMessage(telegram_id, 'Laporan Anda telah terkirim. Cek status di /task.');
+  if (error) {
+    console.error(error);
+    return bot.sendMessage(telegram_id, 'Gagal menyimpan laporan. Coba lagi nanti.');
+  }
+
+  bot.sendMessage(telegram_id, 'Laporan dengan foto telah terkirim. Cek status di /task.');
 });
 
 // /start dan /help

@@ -36,7 +36,7 @@ Selamat datang di Aplikasi Job Management! Berikut daftar perintah yang tersedia
 1. /start - Memulai aplikasi  
 2. /register - Mendaftar sebagai pengguna  
 3. /task - Melihat daftar tugas hari ini  
-4. /report [TaskId] [Deskripsi] - Mengirim laporan penyelesaian tugas  
+4. /report [TaskId] - Mengirim laporan penyelesaian tugas  
 5. /help - Melihat daftar perintah
 `;
 
@@ -98,7 +98,7 @@ bot.onText(/^\/task/, async (msg) => {
     let status = 'belum mengerjakan';
     if (report) status = report.status || 'pending';
 
-    response += `• ${task.title} - ${status}\n`;
+    response += `• ${task.id} - ${task.title} - ${status}\n`;
   });
 
   bot.sendMessage(telegram_id, response);

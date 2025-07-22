@@ -84,37 +84,52 @@ bot.onText(/^\/register/, async (msg) => {
 // task
 bot.onText(/^\/task/, async (msg) => {
   const telegram_id = msg.chat.id;
-  
+
   const isRegistered = await isUserRegistered(telegram_id);
   if (!isRegistered) {
     return bot.sendMessage(telegram_id, 'Anda belum terdaftar. Silakan daftar dengan perintah /register');
   }
 
   const today = dayjs().format('YYYY-MM-DD');
-  const { data: tasks } = await supabase
+
+  // Ambil semua task untuk hari ini
+  const { data: tasks, error: taskError } = await supabase
     .from('tasks')
     .select('*')
     .eq('assigned_date', today);
 
-  if (!tasks || tasks.length === 0) {
+  if (taskError || !tasks || tasks.length === 0) {
     return bot.sendMessage(telegram_id, 'Tidak ada pekerjaan hari ini.');
   }
 
-  const { data: reports } = await supabase
+  // Ambil semua laporan user dan urutkan berdasarkan created_at terbaru
+  const { data: reports, error: reportError } = await supabase
     .from('task_reports')
     .select('*')
-    .eq('submitted_by', telegram_id);
+    .eq('submitted_by', telegram_id)
+    .order('created_at', { ascending: false }); // Urut dari terbaru
 
-  let response = 'Tugas Hari Ini:\n';
-  tasks.forEach((task) => {
-    const report = reports?.find(r => r.task_id === task.id);
-    let status = 'belum mengerjakan';
-    if (report) status = report.status || 'pending';
+  if (reportError) {
+    return bot.sendMessage(telegram_id, 'Gagal mengambil laporan.');
+  }
 
-    response += `• ${task.id} - ${task.title} - ${status}\n`;
-  });
+  // Simpan hanya laporan terbaru per task_id
+  const latestReports = new Map();
+  for (const report of reports) {
+    if (!latestReports.has(report.task_id)) {
+      latestReports.set(report.task_id, report);
+    }
+  }
 
-  bot.sendMessage(telegram_id, response);
+  // Susun respons
+  let response = '📋 *Tugas Hari Ini:*\n\n';
+  for (const task of tasks) {
+    const report = latestReports.get(task.id);
+    const status = report ? (report.status || 'pending') : 'belum mengerjakan';
+    response += `• ${task.id} - ${task.title} - _${status}_\n`;
+  }
+
+  bot.sendMessage(telegram_id, response, { parse_mode: 'Markdown' });
 });
 
 // /report [taskId]

@@ -71,7 +71,7 @@ export default function TaskCard({ task, onStatusUpdate }) {
           .from('task_reports')
           .update({
             status: 'rejected',
-            review_notes: reason,
+            keterangan: reason,
             reviewed_at: new Date().toISOString()
           })
           .eq('id', task.id);

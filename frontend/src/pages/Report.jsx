@@ -22,7 +22,8 @@ export default function Reports() {
         tasks(title),
         users(name)
       `)
-      .in("status", ["approved", "rejected"]); // ✅ Filter hanya yang sudah divalidasi
+      .in("status", ["approved", "rejected"])
+      .order('submitted_at', { ascending: true }); // Sort by oldest first
 
     if (error) {
       console.error("Error fetching reports:", error.message);
@@ -31,58 +32,107 @@ export default function Reports() {
     }
   }
 
+  const getStatusBadge = (status) => {
+    const baseClasses = "px-2 py-1 text-xs font-medium rounded-full";
+    
+    switch (status) {
+      case 'approved':
+        return `${baseClasses} bg-green-100 text-green-800`;
+      case 'rejected':
+        return `${baseClasses} bg-red-100 text-red-800`;
+      default:
+        return `${baseClasses} bg-yellow-100 text-yellow-800`;
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    const options = { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    return new Date(dateString).toLocaleDateString('id-ID', options);
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-100">
       <Sidebar />
       <main className="flex-1 p-8">
-        <h2 className="text-3xl font-bold mb-6">Task Reports</h2>
-        <div className="grid gap-6">
-          {reports.length === 0 ? (
-            <p className="text-gray-600">Belum ada laporan yang divalidasi.</p>
-          ) : (
-            reports.map((report) => (
-              <div
-                key={report.id}
-                className="bg-white rounded-xl shadow p-6 flex flex-col gap-3"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-semibold">
-                    {report.tasks?.title || "Judul Tugas Tidak Ditemukan"}
-                  </h3>
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      report.status === "approved"
-                        ? "bg-green-100 text-green-700"
-                        : report.status === "rejected"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}
-                  >
-                    {report.status}
-                  </span>
-                </div>
-                <p className="text-gray-700 text-sm">
-                  <strong>Nama Karyawan:</strong> {report.users?.name || "-"}
-                </p>
-                <p className="text-gray-700 text-sm">
-                  <strong>Tanggal Submit:</strong> {report.submitted_at || "-"}
-                </p>
-                {report.keterangan && (
-                  <p className="text-gray-700 text-sm">
-                    <strong>Keterangan:</strong> {report.keterangan}
-                  </p>
-                )}
-                {report.photo_url && (
-                  <img
-                    src={report.photo_url}
-                    alt="Task Report"
-                    className="rounded-md mt-2 w-full max-w-xs"
-                  />
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        <h2 className="text-2xl font-bold mb-6">Laporan Tugas</h2>
+        
+        {reports.length === 0 ? (
+          <p className="text-gray-600">Belum ada laporan yang divalidasi.</p>
+        ) : (
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Task</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Karyawan</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Submit</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gambar</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Keterangan</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {reports.map((report, index) => (
+                    <tr key={report.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {index + 1}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {report.tasks?.title || "-"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {report.users?.name || "-"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {formatDate(report.submitted_at)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {report.photo_url ? (
+                          <div className="flex-shrink-0 h-20 w-20"  >
+                            <img 
+                              className="h-20 w-20 object-cover" 
+                              src={report.photo_url} 
+                              alt="Task" 
+                              onClick={() => window.open(report.photo_url, '_blank')}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-500">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-500">
+                          {report.keterangan || "-"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={getStatusBadge(report.status)}>
+                          {report.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

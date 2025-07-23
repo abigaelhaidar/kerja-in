@@ -126,7 +126,7 @@ bot.onText(/^\/task/, async (msg) => {
   for (const task of tasks) {
     const report = latestReports.get(task.id);
     const status = report ? (report.status || 'pending') : 'belum mengerjakan';
-    response += `• ${task.id} - ${task.title} - _${status}_\n`;
+    response += `• ${task.id} - ${task.title} - ${task.description} - _${status}_\n`;
   }
 
   bot.sendMessage(telegram_id, response, { parse_mode: 'Markdown' });
